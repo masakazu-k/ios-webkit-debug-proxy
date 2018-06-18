@@ -405,6 +405,7 @@ dl_status iwdp_on_attach(dl_t dl, const char *device_id, int device_num) {
   }
   char *device_name = iport->device_name;
   int device_version = 0;
+  bool is_usb = true;
 
   // connect to inspector
   int wi_fd;
@@ -421,7 +422,7 @@ dl_status iwdp_on_attach(dl_t dl, const char *device_id, int device_num) {
     wi_fd = self->connect(self, "localhost", 27753);
   } else {
     wi_fd = self->attach(self, device_id, NULL,
-      (device_name ? NULL : &device_name), &device_version);
+      (device_name ? NULL : &device_name), &device_version, &is_usb);
   }
   if (wi_fd < 0) {
     self->remove_fd(self, iport->s_fd);
@@ -1832,8 +1833,6 @@ char *iwdp_ipages_to_text(iwdp_ipage_t *ipages, bool want_json,
           ipage->title ? ipage->title : "");
       char* escaped_app_id = iwdp_escape_json_string_val(
           ipage->app_id ? ipage->app_id : "");
-      char* escaped_page_url = iwdp_escape_json_string_val(
-          ipage->url ? ipage->url : "");
 
       int res = asprintf(&s,
           "%s{\n"
@@ -1846,12 +1845,11 @@ char *iwdp_ipages_to_text(iwdp_ipage_t *ipages, bool want_json,
           "   \"appId\": \"%s\"\n"
           "}",
           (sum_len ? "," : ""), (href && !ipage->iws ? href : ""),
-          escaped_page_url, escaped_title, escaped_page_url,
+          (ipage->url ? ipage->url : ""), escaped_title, (ipage->url ? ipage->url : ""),
           (host ? host : "localhost"), port, ipage->page_num, escaped_app_id);
 
       free(escaped_title);
       free(escaped_app_id);
-      free(escaped_page_url);
 
       if (res < 0) {
         free(href);
@@ -1972,4 +1970,54 @@ iwdp_status iwdp_get_content_type(const char *path, bool is_local,
   }
   *to_mime = (mime ? strdup(mime) : NULL);
   return (mime ? IWDP_SUCCESS : IWDP_ERROR);
+}
+
+// ------------------------------------------------------------
+// libimobile_listener
+// ------------------------------------------------------------
+#include <libimobiledevice/libimobiledevice.h>
+#include <libimobiledevice/lockdown.h>
+
+void libimobile_listener(const idevice_event_t *event, void *user_data) {
+  iwdp_t self = (iwdp_t)user_data;
+  iwdp_idl_t idl = NULL;
+  if(IDEVICE_DEVICE_ADD == event->event) {
+    // attach device event
+    fprintf(stdout, "INFO: event fired IDEVICE_DEVICE_ADD(%s)\n", event->udid);
+    fprintf(stdout, "INFO: connectType %d\n", event->conn_type);
+    idl = iwdp_idl_new();
+    idl->self = self;
+
+    int dl_fd = self->subscribe(self);
+    if (dl_fd < 0) {  // usbmuxd isn't running
+      self->on_error(self, "No device found, is it plugged in?");
+      return;
+    }
+    idl->dl_fd = dl_fd;
+
+    if (self->add_fd(self, dl_fd, idl, false)) {
+      self->on_error(self, "add_fd failed");
+      return;
+    }
+
+    dl_t dl = idl->dl;
+    if (dl->start(dl)) {
+    self->on_error(self, "Unable to start device_listener");
+      return;
+    }
+
+    dl->on_attach(dl, event->udid, 1);
+  }else if(IDEVICE_DEVICE_REMOVE == event->event) {
+    // dettach device event
+    fprintf(stdout, "INFO: event fired IDEVICE_DEVICE_REMOVE(%s)\n", event->udid);
+    fprintf(stdout, "INFO: connectType %d\n", event->conn_type);
+  }
+}
+
+iwdp_status iwdp_search(iwdp_t self) {
+  fprintf(stderr,"Search remote device info:\n");
+  if(!idevice_event_subscribe(libimobile_listener, self)){
+    return IWDP_ERROR;
+  }
+  return IWDP_SUCCESS;
 }

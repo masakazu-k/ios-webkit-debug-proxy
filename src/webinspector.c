@@ -26,6 +26,7 @@
 #include <libimobiledevice/installation_proxy.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
+#include <libimobiledevice/webinspector.h>
 
 #include "char_buffer.h"
 #include "webinspector.h"
@@ -89,7 +90,7 @@ wi_status idevice_connection_get_fd(idevice_connection_t connection,
 #endif
 
 int wi_connect(const char *device_id, char **to_device_id,
-    char **to_device_name, int *to_device_version, int recv_timeout) {
+    char **to_device_name, int *to_device_version, bool *is_usb, int recv_timeout) {
   int ret = -1;
 
   idevice_t phone = NULL;
@@ -153,6 +154,18 @@ int wi_connect(const char *device_id, char **to_device_id,
   if (idevice_connect(phone, service->port, &connection)) {
     perror("idevice_connect failed!");
     goto leave_cleanup;
+  }
+
+  if(service->ssl_enabled){
+    fprintf(stdout, "INFO: %s(%s) is connected via WiFi\n", *to_device_name, device_id);
+    *is_usb = false;
+    if(idevice_connection_enable_ssl(connection) != IDEVICE_E_SUCCESS){
+        perror("idevice_connection_enable_ssl failed!");
+        goto leave_cleanup;
+    }
+  } else {
+    *is_usb = true;
+    fprintf(stdout, "INFO: %s(%s) is connected via USB\n", *to_device_name, device_id);
   }
 
   if (client) {

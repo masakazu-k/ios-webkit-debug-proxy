@@ -88,6 +88,8 @@ int main(int argc, char** argv) {
     return -1;// TODO cleanup
   }
 
+  iwdp_search(iwdp);
+
   sm_t sm = self->sm;
   while (!quit_flag) {
     if (sm->select(sm, 2) < 0) {
@@ -110,9 +112,9 @@ int iwdpm_subscribe(iwdp_t iwdp) {
   return dl_connect(-1);
 }
 int iwdpm_attach(iwdp_t iwdp, const char *device_id, char **to_device_id,
-    char **to_device_name, int *to_device_version) {
+    char **to_device_name, int *to_device_version, bool *is_usb) {
   return wi_connect(device_id, to_device_id, to_device_name,
-      to_device_version, -1);
+      to_device_version, is_usb, -1);
 }
 iwdp_status iwdpm_select_port(iwdp_t iwdp, const char *device_id,
     int *to_port, int *to_min_port, int *to_max_port) {

@@ -68,7 +68,7 @@ struct iwdp_struct {
   // @param to_device_name optional selected device name
   // @result fd, or -1 for error
   int (*attach)(iwdp_t iwdp, const char *device_id, char **to_device_id,
-                char **to_device_name, int *to_device_version);
+                char **to_device_name, int *to_device_version, bool *is_usb);
 
   // Select the port-scan range for the browser listener.
   // @param to_port preferred port, e.g. 9227.  If a device is re-attached
@@ -100,6 +100,9 @@ struct iwdp_struct {
   iwdp_status (*on_error)(iwdp_t self, const char *format, ...);
   iwdp_private_t private_state;
 };
+
+// -----------------------------------
+iwdp_status iwdp_search(iwdp_t self);
 
 #ifdef	__cplusplus
 }
